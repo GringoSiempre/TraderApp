@@ -15,7 +15,7 @@ pub struct User {
     pub encrypted_master_key: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 // Credentials
 pub struct Credentials {
     pub login: String,
@@ -105,15 +105,15 @@ pub fn register_user(email: &str, password: &str) {
     fs::write("users.json", data).expect("Unable to write json file");
 }
 
-pub fn load_credentials(master_key: &[u8; 32], file_path: &str) -> Credentials {
+pub fn load_credentials(master_key: &[u8; 32], file_path: &str) -> Vec<Credentials> {
     let encrypted_data_base64 = fs::read_to_string(file_path).expect("Unable to read file");
     let encrypted_data = base64::decode(&encrypted_data_base64).expect("Unable to decode base64");
     let decrypted_data = decrypt_data(&encrypted_data, master_key);
-    let credentials: Credentials = serde_json::from_str(&decrypted_data).unwrap();
+    let credentials: Vec<Credentials> = serde_json::from_str(&decrypted_data).unwrap();
     credentials
 }
 
-pub fn save_encrypted_credentials(credentials: &Credentials, master_key: &[u8; 32], file_path: &str) {
+pub fn save_encrypted_credentials(credentials: &Vec<Credentials>, master_key: &[u8; 32], file_path: &str) {
     // Serialize structure to JSON
     let json_data = serde_json::to_string(credentials).expect("Failed to serialize credentials");
     // Encrypt JSON

@@ -25,6 +25,7 @@ struct MyApp {
     password_input: String,
     is_authenticated: bool,
     users: Vec<User>,
+    credentials: Vec<Credentials>,
     show_time: bool,
     error_message: String,
 }
@@ -36,6 +37,7 @@ impl Default for MyApp {
             password_input: String::new(),
             is_authenticated: false,
             users: crypto_utils::load_users(),
+            credentials: Vec::new(),
             show_time: false,
             error_message: String::new(),
         }
@@ -87,16 +89,24 @@ impl eframe::App for MyApp {
                             let master_key_slice: &[u8; 32] = master_key.as_slice().try_into().expect("Invalid master key length");
                             println!("{}", decrypted_master_key);
                             
-                            // let credentials = Credentials {
-                            //     login: "ss.cz@icloud.com".to_string(),
-                            //     password: "Freedom.asf10-WAxBh=".to_string(),
-                            //     public_key: "1805d613d75aa24e9993a9fd0dc46373".to_string(),
-                            //     secret_key: "a915db4dbde1c9889de62d7a57c42c2e097fbc54".to_string(),
-                            // };
+                            // let credentials = vec![
+                            //     Credentials {
+                            //         login: "ss.cz@icloud.com".to_string(),
+                            //         password: "Freedom.asf10-WAxBh=".to_string(),
+                            //         public_key: "1805d613d75aa24e9993a9fd0dc46373".to_string(),
+                            //         secret_key: "a915db4dbde1c9889de62d7a57c42c2e097fbc54".to_string(),
+                            //     },
+                            //     Credentials {
+                            //         login: "Dmitrii.ulanov@seznam.cz".to_string(),
+                            //         password: "Dimonka11".to_string(),
+                            //         public_key: "c4e267c031ed75df047252ed7bee8afb".to_string(),
+                            //         secret_key: "0289c509ae998a3540a28542b3ead3bdbfa9db15".to_string(),
+                            //     },
+                            // ];
                             // crypto_utils::save_encrypted_credentials(&credentials, master_key_slice, "credentials.json.enc");
                             
-                            let credentials2 = crypto_utils::load_credentials(master_key_slice, "credentials.json.enc");
-                            println!("{}", credentials2.login);
+                            self.credentials = crypto_utils::load_credentials(master_key_slice, "credentials.json.enc");
+                            println!("{:?}", self.credentials);
                         } else {
                             self.error_message = "Wrong password".to_string();
                         }
