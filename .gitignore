@@ -1,3 +1,7 @@
 /target
 .idea/
 **/*.rs.bk
+/credentials.json.enc
+/data.json.enc
+/MK.txt
+/users.json
