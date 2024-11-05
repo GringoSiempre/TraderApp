@@ -16,7 +16,7 @@ pub struct User {
     pub accessible_credentials: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 // Credentials
 pub struct Credentials {
     pub id: String,
@@ -128,4 +128,12 @@ pub fn save_encrypted_credentials(credentials: &Vec<Credentials>, master_key: &[
     let encrypted_json_base64 = base64::encode(&encrypted_json);
     // Save encrypted data to file
     fs::write(file_path, encrypted_json_base64).expect("Unable to write encrypted data to file");
+}
+
+pub fn filter_credentials (credentials: Vec<Credentials>, accessible_ids: String) -> Vec<Credentials> {
+    let accessible_ids_vec: Vec<&str> = accessible_ids.split(",").collect();
+    credentials
+        .into_iter()
+        .filter(|c| accessible_ids_vec.contains(&c.id.as_str()))
+        .collect()
 }
