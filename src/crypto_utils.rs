@@ -13,6 +13,7 @@ pub struct User {
     pub email: String,
     pub password_hash: String,
     pub encrypted_master_key: String,
+    pub accessible_credentials: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -73,7 +74,7 @@ pub fn load_users() -> Vec<User> {
     })
 }
 
-pub fn register_user(email: &str, password: &str) {
+pub fn register_user(email: &str, password: &str, accessible_credentials: &str) {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     // Hashing password
@@ -92,11 +93,15 @@ pub fn register_user(email: &str, password: &str) {
     // Encoding master_key using derived_key
     let encrypted_master_key = encrypt_data(master_key_input, &derived_key);
     let encrypted_master_key_base64 = base64::encode(&encrypted_master_key);
+    // Encoding accessible_credentials using derived_key
+    let encrypted_accessible_credentials = encrypt_data(accessible_credentials, &derived_key);
+    let encrypted_accessible_credentials_base64 = base64::encode(&encrypted_accessible_credentials);
     
     let new_user = User {
         email: email.to_string(),
         password_hash,
         encrypted_master_key: encrypted_master_key_base64,
+        accessible_credentials: encrypted_accessible_credentials_base64,
     };
     let mut users = load_users();
     users.push(new_user);
