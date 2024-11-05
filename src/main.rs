@@ -34,7 +34,6 @@ struct MyApp {
     is_connected: bool,
     users: Vec<User>,
     credentials: Vec<Credentials>,
-    show_time: bool,
     error_message: String,
 }
 
@@ -47,7 +46,6 @@ impl Default for MyApp {
             is_connected: false,
             users: crypto_utils::load_users(),
             credentials: Vec::new(),
-            show_time: false,
             error_message: String::new(),
         }
     }
@@ -92,15 +90,20 @@ impl eframe::App for MyApp {
                             let master_key = base64::decode(&decrypted_master_key).expect("Failed to decode decrypted_master_key");
                             let master_key_slice: &[u8; 32] = master_key.as_slice().try_into().expect("Invalid master key length");
                             println!("{}", decrypted_master_key);
+                            let encrypted_accessible_credentials = base64::decode(&user.accessible_credentials).expect("Failed to decode encrypted_accessible_credentials");
+                            let decrypted_accessible_credentials = crypto_utils::decrypt_data(&encrypted_accessible_credentials, &derived_key); // Master key. Human view
+                            println!("{}", decrypted_accessible_credentials);
                             
                             // let credentials = vec![
                             //     Credentials {
+                            //         id: "ff1".to_string(), 
                             //         login: "ss.cz@icloud.com".to_string(),
                             //         password: "Freedom.asf10-WAxBh=".to_string(),
                             //         public_key: "1805d613d75aa24e9993a9fd0dc46373".to_string(),
                             //         secret_key: "a915db4dbde1c9889de62d7a57c42c2e097fbc54".to_string(),
                             //     },
                             //     Credentials {
+                            //         id: "ff2".to_string(),
                             //         login: "Dmitrii.ulanov@seznam.cz".to_string(),
                             //         password: "Dimonka11".to_string(),
                             //         public_key: "c4e267c031ed75df047252ed7bee8afb".to_string(),

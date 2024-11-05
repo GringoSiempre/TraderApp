@@ -19,6 +19,7 @@ pub struct User {
 #[derive(Serialize, Deserialize, Debug)]
 // Credentials
 pub struct Credentials {
+    pub id: String,
     pub login: String,
     pub password: String,
     pub public_key: String,
