@@ -14,6 +14,9 @@ use crypto_utils::{User, Credentials};
 pub mod api;
 use api::{connect_to_ff_ws};
 
+// API tools and structures
+pub mod api_utils;
+
 use eframe::egui;
 use egui::RichText;
 use chrono::Local;

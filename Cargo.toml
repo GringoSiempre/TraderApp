@@ -8,11 +8,13 @@ eframe = "0.29.1"
 egui = "0.29.1"
 chrono = "0.4.38"
 serde = { version = "1.0.213", features = ["derive"] }
+serde_urlencoded = "0.7.1"
 serde_json = "1.0.132"
 argon2 = "0.5.3"
 ring = "0.17.8"
 base64 = "0.22.1"
 rand = "0.8.5"
-tokio = { version = "1.41.0", features = ["full"] } # For async
-tokio-tungstenite = "0.24.0"
+tokio = { version = "1.41.0", features = ["full"] } # Async
+tokio-tungstenite = { version = "0.24.0", features = ["native-tls"] } # WebSocket connections. Without native-tls will not work.  
 futures-util = "0.3.31"
+reqwest = { version = "0.12.9", features = ["blocking","json"] } # HTTP-requests
