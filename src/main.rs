@@ -23,10 +23,11 @@ use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::SaltString;
 use rand::rngs::OsRng;
 use ring::rand::{SecureRandom, SystemRandom};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use egui::UiKind::ScrollArea;
 use tokio::task;
-
+use crate::api::Connection;
 
 struct MyApp {
     email_input: String,
@@ -35,6 +36,7 @@ struct MyApp {
     is_connected: bool,
     users: Vec<User>,
     credentials: Vec<Credentials>,
+    connections: Vec<Connection>,
     error_message: String,
 }
 
@@ -47,6 +49,7 @@ impl Default for MyApp {
             is_connected: false,
             users: crypto_utils::load_users(),
             credentials: Vec::new(),
+            connections: Vec::new(),
             error_message: String::new(),
         }
     }
@@ -112,10 +115,8 @@ impl eframe::App for MyApp {
                             let decrypted_master_key = crypto_utils::decrypt_data(&encrypted_master_key, &derived_key); // Master key. Human view
                             let master_key = base64::decode(&decrypted_master_key).expect("Failed to decode decrypted_master_key");
                             let master_key_slice: &[u8; 32] = master_key.as_slice().try_into().expect("Invalid master key length");
-                            println!("{}", decrypted_master_key);
                             let encrypted_accessible_credentials = base64::decode(&user.accessible_credentials).expect("Failed to decode encrypted_accessible_credentials");
-                            let accessible_credentials = crypto_utils::decrypt_data(&encrypted_accessible_credentials, &derived_key); // Master key. Human view
-                            println!("{}", accessible_credentials);
+                            let accessible_credentials = crypto_utils::decrypt_data(&encrypted_accessible_credentials, &derived_key); // List of accessible credentials.
 
                             // let credentials = vec![
                             //     Credentials {
@@ -137,6 +138,30 @@ impl eframe::App for MyApp {
                             
                             self.credentials = crypto_utils::load_credentials(master_key_slice, "credentials.json.enc");
                             self.credentials = crypto_utils::filter_credentials(self.credentials.clone(), accessible_credentials);
+                            for credentials in self.credentials.iter() {
+                                let connection = Connection::new(credentials.clone());
+                                let conn_receiver = connection.channels.conn_rx.clone();
+                                let conn_sender  = connection.channels.conn_tx.clone();
+                                self.connections.push(connection.clone());
+                                tokio::spawn(async move {
+                                    if let Err(e) = connect_to_ff_ws(connection.credentials.clone(), conn_receiver, conn_sender).await {
+                                        eprintln!("Failed to connect to {}, {}", connection.credentials.id, e)
+                                    }
+                                });
+                                let main_receiver = connection.channels.main_rx.clone();
+                                let main_sender = connection.channels.main_tx.clone();
+                                tokio::spawn(async move {
+                                    let mut main_receiver = main_receiver.lock().await;
+                                    let main_sender = main_sender.clone();
+                                    while let Some(message) = main_receiver.recv().await {
+                                        println!("Received from connector: {}", message);
+                                        let main_sender =main_sender.lock().await;
+                                        main_sender
+                                            .send("Roger that.".to_string())
+                                            .expect("Failed to send message from main");
+                                    }
+                                });
+                            }
                         } else {
                             self.error_message = "Wrong password".to_string();
                         }

@@ -1,52 +1,69 @@
 use crate::traits::{Publisher, Subscriber};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use futures_util::StreamExt;
 use std::error::Error;
+use std::time::Duration;
+use tokio::time;
+use serde::{Deserialize, Serialize};
+use crate::crypto_utils::Credentials;
 
+#[derive(Clone)]
 pub struct ConnectionChannels {
-    send_channel: (mpsc::UnboundedSender<String>, mpsc::UnboundedReceiver<String>),
-    receive_channel: (mpsc::UnboundedSender<String>, mpsc::UnboundedReceiver<String>),
+    pub main_tx: Arc<Mutex<UnboundedSender<String>>>,
+    pub conn_rx: Arc<Mutex<UnboundedReceiver<String>>>,
+    pub conn_tx: Arc<Mutex<UnboundedSender<String>>>,
+    pub main_rx: Arc<Mutex<UnboundedReceiver<String>>>,
 }
 
+#[derive(Clone)]
 pub struct Connection {
-    id: String,
-    channels: ConnectionChannels,
+    pub credentials: Credentials,
+    pub channels: ConnectionChannels,
 }
 
 impl Connection {
-    pub fn new(id: String) -> Self {
-        let send_channel = mpsc::unbounded_channel();
-        let receive_channel = mpsc::unbounded_channel();
+    pub fn new(credentials: Credentials) -> Self {
+        let (main_tx, conn_rx) = mpsc::unbounded_channel();
+        let (conn_tx, main_rx) = mpsc::unbounded_channel();
         Connection {
-            id,
+            credentials,
             channels: ConnectionChannels {
-                send_channel,
-                receive_channel,
+                main_tx: Arc::new(Mutex::new(main_tx)), 
+                conn_rx: Arc::new(Mutex::new(conn_rx)),
+                conn_tx: Arc::new(Mutex::new(conn_tx)), 
+                main_rx: Arc::new(Mutex::new(main_rx)),
             },
         }
     }
 }
-// Пример организации канала: let connection = Connection::new("ff1");
-// Доступ к каналам через именованные поля
-// let (send_tx, send_rx) = &connection.channels.send_channel;
-// let (recv_tx, recv_rx) = &connection.channels.receive_channel;
-// Теперь вы можете использовать эти каналы для отправки и получения данных
-// send_tx.send("Message".to_string()).await.unwrap();
 
-pub async fn connect_to_ff_ws(url: &str) -> Result<(), Box<dyn Error>> {
-    let (ws_stream, _) = connect_async(url).await?;
-    println!("WebSocket connection established!");
+pub async fn connect_to_ff_ws(
+    credentials: Credentials,
+    receiver: Arc<Mutex<mpsc::UnboundedReceiver<String>>>,
+    sender: Arc<Mutex<mpsc::UnboundedSender<String>>>,
+    ) -> Result<(), Box<dyn Error>> {
+    println!("WebSocket connection established! {}", &credentials.id);
+
+    let mut receiver = receiver.lock().await;
+    let sender = sender.clone();
+        
+    tokio::spawn(async move {
+        let sender = sender.lock().await;
+        loop {
+            sender
+                .send(format!("{} I'm ok...", credentials.id))
+                .expect("Failed to send message");
+            time::sleep(Duration::from_secs(2)).await;
+        }        
+    });
     
-    let(_, mut read) = ws_stream.split();
-    while let Some(message) = read.next().await {
-        if let Ok(msg) = message {
-            if msg.is_text() {
-                let text = msg.into_text().unwrap();
-            }
-        }
+    while let Some(message) = receiver.recv().await {
+        println!("Received from main: {}", message);        
     }
     Ok(())
 }
