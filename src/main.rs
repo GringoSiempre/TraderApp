@@ -3,8 +3,8 @@ mod market_data;
 pub use market_data::MarketData;
 
 // Traits for pattern Observer
-mod traits;
-pub use traits::{Publisher, Subscriber};
+mod observer;
+pub use observer::{Publisher, Subscriber};
 
 // Security and authorisation functions
 pub mod crypto_utils;
