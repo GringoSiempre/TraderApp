@@ -1,4 +1,4 @@
-use crate::traits::{Publisher, Subscriber};
+use crate::observer::{MessagePublisher, MessageSubscriber};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;

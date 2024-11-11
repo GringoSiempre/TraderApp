@@ -4,7 +4,7 @@ pub use market_data::MarketData;
 
 // Traits for pattern Observer
 mod observer;
-pub use observer::{Publisher, Subscriber};
+pub use observer::{MessagePublisher,MessageSubscriber};
 
 // Security and authorisation functions
 pub mod crypto_utils;
@@ -22,21 +22,26 @@ use eframe::egui;
 use egui::RichText;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use tokio::sync::mpsc;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use ring::rand::SecureRandom;
 
 use crate::api::Connection;
+use crate::observer::{ConsoleOutputSubscriber, DataProcessorSubscriber, MessagesToFileSubscriber, ServerMessagesPublisher};
 
 struct MyApp {
     email_input: String,
     password_input: String,
     is_authenticated: bool,
-    is_connected: bool,
     users: Vec<User>,
     credentials: Vec<Credentials>,
     connections: Vec<Connection>,
     requests: Vec<Request>,
     tickers: Vec<String>,
+    server_messages_publisher: ServerMessagesPublisher,
+    data_processor: DataProcessorSubscriber,
+    data_receiver: mpsc::Receiver<String>,
+    display_data: String,
     error_message: String,
 }
 
@@ -46,11 +51,11 @@ impl Default for MyApp {
             "QQQ.US".to_string(),
             "SPY.US".to_string()
         ];
+        let (data_sender, data_receiver) = mpsc::channel(100);
         Self {
             email_input: String::new(),
             password_input: String::new(),
             is_authenticated: false,
-            is_connected: false,
             users: crypto_utils::load_users(),
             credentials: Vec::new(),
             connections: Vec::new(),
@@ -60,6 +65,10 @@ impl Default for MyApp {
                 Request::order_book(tickers.clone()),
             ],
             tickers: tickers,
+            server_messages_publisher: ServerMessagesPublisher::new(),
+            data_processor: DataProcessorSubscriber::new(data_sender),
+            data_receiver: data_receiver,
+            display_data: String::new(),
             error_message: String::new(),
         }
     }
@@ -69,15 +78,9 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.is_authenticated {
             egui::CentralPanel::default().show(ctx, |ui| {
-                if !self.is_connected {
-                    if ui.button("Connect to WebSocket").clicked() {
-                        self.is_connected = true;
-                    }
-                    ui.label("Press the button to connect to WebSocket");
-                } else {
-                    ui.label("Connection established");
+                while let Ok(new_data) = self.data_receiver.try_recv() {
+                    self.display_data = new_data;
                 }
-
                 ui.heading("Credentials data");
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.horizontal(|ui| {
@@ -92,12 +95,13 @@ impl eframe::App for MyApp {
                         ui.horizontal(|ui| {
                             ui.add_sized(egui::Vec2::new(50.0, 20.0), egui::Label::new(&cred.id));
                             ui.add_sized(egui::Vec2::new(150.0, 20.0), egui::Label::new(&cred.login));
-                            ui.add_sized(egui::Vec2::new(150.0, 20.0), egui::Label::new(&cred.password));
+                            ui.add_sized(egui::Vec2::new(150.0, 20.0), egui::Label::new("**********"));
                             ui.add_sized(egui::Vec2::new(180.0, 20.0), egui::Label::new(&cred.public_key));
-                            ui.add_sized(egui::Vec2::new(180.0, 20.0), egui::Label::new(&cred.secret_key));
+                            ui.add_sized(egui::Vec2::new(180.0, 20.0), egui::Label::new("**********"));
                         });
                     }
                 });
+                ui.label(format!("\n\nlast message from server: {}", self.display_data));
 
             });
         } else {
@@ -120,6 +124,11 @@ impl eframe::App for MyApp {
                         {
                             self.is_authenticated = true;
                             self.error_message.clear();
+                            
+                            self.server_messages_publisher.subscribe(Box::new(ConsoleOutputSubscriber));
+                            self.server_messages_publisher.subscribe(Box::new(MessagesToFileSubscriber::new("messages.log".to_string())));
+                            self.server_messages_publisher.subscribe(Box::new(self.data_processor.clone()));
+                            
                             let derived_key = crypto_utils::derive_key_from_password(&self.password_input);
                             let encrypted_master_key = base64::decode(&user.encrypted_master_key).expect("Failed to decode encrypted_master_key");
                             let decrypted_master_key = crypto_utils::decrypt_data(&encrypted_master_key, &derived_key); // Master key. Human view
@@ -146,12 +155,12 @@ impl eframe::App for MyApp {
                                 // Incoming message handler
                                 let main_receiver = connection.channels.main_rx.clone();
                                 let credentials_clone = credentials.clone();
+                                let mut publisher = self.server_messages_publisher.clone();
                                 tokio::spawn(async move {
                                     let mut main_receiver = main_receiver.lock().await;
                                     // let main_sender = main_sender.clone();
                                     while let Some(message) = main_receiver.recv().await {
-                                        println!("{} {}: {}", credentials_clone.id.clone(), chrono::Local::now(), message);
-                                        // let main_sender =main_sender.lock().await;
+                                        publisher.notify_subscribers(&credentials_clone.id.clone(), chrono::Local::now(), &message);
                                     }
                                 });
                                 // Sending initial requests
