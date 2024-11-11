@@ -16,20 +16,15 @@ use api::{connect_to_ff_ws};
 
 // API tools and structures
 pub mod api_utils;
+use api_utils::Request;
 
 use eframe::egui;
 use egui::RichText;
-use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use argon2::password_hash::SaltString;
-use rand::rngs::OsRng;
-use ring::rand::{SecureRandom, SystemRandom};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use egui::UiKind::ScrollArea;
-use tokio::task;
+use ring::rand::SecureRandom;
+
 use crate::api::Connection;
 
 struct MyApp {
@@ -40,11 +35,17 @@ struct MyApp {
     users: Vec<User>,
     credentials: Vec<Credentials>,
     connections: Vec<Connection>,
+    requests: Vec<Request>,
+    tickers: Vec<String>,
     error_message: String,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
+        let tickers = vec![
+            "QQQ.US".to_string(),
+            "SPY.US".to_string()
+        ];
         Self {
             email_input: String::new(),
             password_input: String::new(),
@@ -53,6 +54,12 @@ impl Default for MyApp {
             users: crypto_utils::load_users(),
             credentials: Vec::new(),
             connections: Vec::new(),
+            requests: vec![
+                Request::quotes(tickers.clone()), 
+                Request::portfolio(), 
+                Request::order_book(tickers.clone()),
+            ],
+            tickers: tickers,
             error_message: String::new(),
         }
     }
@@ -121,23 +128,7 @@ impl eframe::App for MyApp {
                             let encrypted_accessible_credentials = base64::decode(&user.accessible_credentials).expect("Failed to decode encrypted_accessible_credentials");
                             let accessible_credentials = crypto_utils::decrypt_data(&encrypted_accessible_credentials, &derived_key); // List of accessible credentials.
 
-                            // let credentials = vec![
-                            //     Credentials {
-                            //         id: "ff1".to_string(),
-                            //         login: "ss.cz@icloud.com".to_string(),
-                            //         password: "Freedom.asf10-WAxBh=".to_string(),
-                            //         public_key: "1805d613d75aa24e9993a9fd0dc46373".to_string(),
-                            //         secret_key: "a915db4dbde1c9889de62d7a57c42c2e097fbc54".to_string(),
-                            //     },
-                            //     Credentials {
-                            //         id: "ff2".to_string(),
-                            //         login: "Dmitrii.ulanov@seznam.cz".to_string(),
-                            //         password: "Dimonka11".to_string(),
-                            //         public_key: "c4e267c031ed75df047252ed7bee8afb".to_string(),
-                            //         secret_key: "0289c509ae998a3540a28542b3ead3bdbfa9db15".to_string(),
-                            //     },
-                            // ];
-                            // crypto_utils::save_encrypted_credentials(&credentials, master_key_slice, "credentials.json.enc");
+                            // The place for saving credentials code 
                             
                             self.credentials = crypto_utils::load_credentials(master_key_slice, "credentials.json.enc");
                             self.credentials = crypto_utils::filter_credentials(self.credentials.clone(), accessible_credentials);
@@ -146,24 +137,32 @@ impl eframe::App for MyApp {
                                 let conn_receiver = connection.channels.conn_rx.clone();
                                 let conn_sender  = connection.channels.conn_tx.clone();
                                 self.connections.push(connection.clone());
+                                let credentials_clone = credentials.clone(); 
                                 tokio::spawn(async move {
-                                    if let Err(e) = connect_to_ff_ws(connection.credentials.clone(), conn_receiver, conn_sender).await {
-                                        eprintln!("Failed to connect to {}, {}", connection.credentials.id, e)
+                                    if let Err(e) = connect_to_ff_ws(credentials_clone.clone(), conn_receiver, conn_sender).await {
+                                        eprintln!("Failed to connect to {}, {}", credentials_clone.id.clone(), e)
                                     }
                                 });
+                                // Incoming message handler
                                 let main_receiver = connection.channels.main_rx.clone();
-                                let main_sender = connection.channels.main_tx.clone();
+                                let credentials_clone = credentials.clone();
                                 tokio::spawn(async move {
                                     let mut main_receiver = main_receiver.lock().await;
-                                    let main_sender = main_sender.clone();
+                                    // let main_sender = main_sender.clone();
                                     while let Some(message) = main_receiver.recv().await {
-                                        println!("Received from connector: {}", message);
-                                        let main_sender =main_sender.lock().await;
-                                        main_sender
-                                            .send("Roger that.".to_string())
-                                            .expect("Failed to send message from main");
+                                        println!("{} {}: {}", credentials_clone.id.clone(), chrono::Local::now(), message);
+                                        // let main_sender =main_sender.lock().await;
                                     }
                                 });
+                                // Sending initial requests
+                                for request in &self.requests {
+                                    let main_sender = connection.channels.main_tx.clone();
+                                    let message = request.message().clone();
+                                    tokio::spawn(async move {
+                                        let main_sender = main_sender.lock().await;
+                                        main_sender.send(message).unwrap();
+                                    });
+                                };
                             }
                         } else {
                             self.error_message = "Wrong password".to_string();
@@ -187,13 +186,11 @@ impl eframe::App for MyApp {
 
 #[tokio::main]
 async fn main() {
-    // crypto_utils::register_user("user1@mail.com","123","ff1,ff2");
-    // crypto_utils::register_user("user2@mail.com","234","ff2");
-    // crypto_utils::register_user("user3@mail.com","345","ff1");
+    // The place for registering new users 
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1000.0, 600.0]),
+            .with_inner_size([1000.0, 800.0]),
         ..Default::default()    
     };
     eframe::run_native(

@@ -52,65 +52,43 @@ pub async fn connect_to_ff_ws(
     sender: Arc<Mutex<mpsc::UnboundedSender<String>>>,
     ) -> Result<(), Box<dyn Error>> {
     let sid = get_sid_ff(credentials.clone()).await;
+    sender.lock().await.send("Trying to connect...".to_string())?;
     let ws_url = WS_API_FF_URL.to_string() + FF_SID + &sid;
     let url = ws_url.as_str();
     let (ws_stream, _) = connect_async(url).await.expect("Failed to connect.");
+    sender.lock().await.send("Connected.".to_string())?;
     let (mut write, mut read) = ws_stream.split();
     let write = Arc::new(Mutex::new(write));
 
     // Receive messages from Freedom
     let id = credentials.id.clone();
     let write_clone = write.clone();
+    let sender_clone = sender.clone();
     tokio::spawn(async move {
+        let mut write = write_clone.lock().await;
+        let sender = sender_clone.lock().await;
         while let Some(message) = read.next().await {
-            let mut write = write_clone.lock().await;
             match message {
                 Ok(Message::Text(text)) => {
-                    println!("{} Received from Freedom WS at {}: {}", id, chrono::Local::now(), text);
+                    sender.send(text).expect("Failed to send message");
                 },
                 Ok(Message::Binary(bin)) => println!("{} Binary data received: {:?}\n", id, bin),
                 Ok(Message::Frame(frame)) => println!("{} Text message received: {}\n", id, frame),
                 Ok(Message::Ping(ping)) => write.send(tokio_tungstenite::tungstenite::protocol::Message::Pong(ping)).await.expect("Ping Error"),
                 Ok(Message::Pong(_)) => println!("{} Ping answer received.\n", id),
                 Ok(Message::Close(_)) => { println!("{} Connection closed.\n", id); break; }
-                Err(err) => println!("{} Error at {}: {}", id, chrono::Local::now(), err),
+                Err(err) => { println!("{} Error at {}: {}", id, chrono::Local::now(), err); break; },
             }
-        }        
-    });
-    // Send messages to GUI 
-    let id = credentials.id.clone();
-    let sender = sender.clone();
-    tokio::spawn(async move {
-        let sender = sender.lock().await;
-        loop {
-            time::sleep(Duration::from_secs(600)).await;
-            sender
-                .send(format!("{} on air...", id))
-                .expect("Failed to send message");
         }        
     });
     // Receive messages from GUI
     let id = credentials.id.clone();
-    let mut receiver = receiver.lock().await;
-    while let Some(message) = receiver.recv().await {
-        println!("{} Received from main: {}", id, message);        
+    let mut receiver_clone = receiver.lock().await;
+    let write_clone = write.clone();
+    while let Some(message) = receiver_clone.recv().await {
+        let mut write = write_clone.lock().await;
+        write.send(Message::Text(message)).await.expect("Failed to send message");
     }
-    
     Ok(())
 }
 
-// Receive Security ID (sid) from Freedom24
-pub async fn get_sid_ff(credentials: Credentials) -> String {
-    // Creating the request
-    let client = Client::new();
-    let auth_message = AuthMessage::new (credentials.login.as_str(), credentials.password.as_str());
-    let mut headers = reqwest::header::HeaderMap::new();
-    let content_type = reqwest::header::HeaderValue::from_static("application/x-www-form-urlencoded");
-    headers.insert(reqwest::header::CONTENT_TYPE, content_type);
-    let urlencoded_message = serde_urlencoded::to_string(&auth_message).unwrap();
-    // Sending POST request
-    let response = client.post(HTTPS_API_FF_URL).headers(headers).body(urlencoded_message).send().await.expect("Error sending POST request");
-    let response_text = response.text().await.unwrap();
-    let parsed_response_text: serde_json::Value = serde_json::from_str(&response_text).expect("Failed to parse json");
-    parsed_response_text["SID"].as_str().unwrap().to_string()
-}
