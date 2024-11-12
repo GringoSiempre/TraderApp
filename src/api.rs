@@ -1,4 +1,3 @@
-use crate::observer::{MessagePublisher, MessageSubscriber};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
@@ -6,13 +5,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use futures_util::{StreamExt, SinkExt};
-// use futures_util::stream::{SplitSink, SplitStream};
-// futures::stream::StreamExt;
 use std::error::Error;
-use std::time::Duration;
-use tokio::time;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use crate::crypto_utils::Credentials;
 use crate::api_utils::*;
 

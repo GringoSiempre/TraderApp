@@ -1,6 +1,5 @@
 // Structs for market data updates
 mod market_data;
-pub use market_data::MarketData;
 
 // Traits for pattern Observer
 mod observer;
@@ -21,7 +20,6 @@ use api_utils::Request;
 use eframe::egui;
 use egui::RichText;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use tokio::sync::mpsc;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use ring::rand::SecureRandom;
@@ -60,7 +58,7 @@ impl Default for MyApp {
             credentials: Vec::new(),
             connections: Vec::new(),
             requests: vec![
-                Request::quotes(tickers.clone()), 
+                Request::quotes(tickers.clone()),
                 Request::portfolio(), 
                 Request::order_book(tickers.clone()),
             ],
@@ -199,7 +197,7 @@ async fn main() {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1000.0, 800.0]),
+            .with_inner_size([1000.0, 1000.0]),
         ..Default::default()    
     };
     eframe::run_native(
