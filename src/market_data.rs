@@ -14,7 +14,7 @@ pub struct QuoteMessage {
     acd: Option<i32>, // Accumulated coupon interest (ACI)
     bac: Option<String>, // Best offer change mark (\'\'unchanged, \'D\'down, \'U\'up)
     baf: Option<i32>, // Volume of the best offer
-    bap: Option<f64>, // Best offer
+    pub bap: Option<f64>, // Best offer
     bas: Option<i32>, // Value (size) of the best offer
     base_contract_code: Option<String>,
     base_currency: Option<String>,
@@ -22,10 +22,10 @@ pub struct QuoteMessage {
     bat: Option<String>,
     bbc: Option<String>, // Designations of the best bid changes (\'\' – no changes, \'D\' - down, \'U\' - up)
     bbf: Option<i32>, // Best bid volume
-    bbp: Option<f64>, // Best bid
+    pub bbp: Option<f64>, // Best bid
     bbs: Option<i32>, // Best bid size
     bbt: Option<String>,
-    c: Option<String>, // Ticker
+    pub c: Option<String>, // Ticker
     chg: Option<f64>, // Change in the price of the last trade in points, relative to the closing price of the previous trading session
     chg110: Option<f64>,
     chg22: Option<f64>,
@@ -47,10 +47,10 @@ pub struct QuoteMessage {
     issue_nb: Option<String>,
     kind: Option<i32>,
     ltc: Option<String>, // Designations of price change (\'\' – no changes, \'D\' - down, \'U\' - up)
-    ltp: Option<f64>, // Last trade price
+    pub ltp: Option<f64>, // Last trade price
     ltr: Option<String>, // Exchange of the latest trade
     lts: Option<i32>, // Last trade size
-    ltt: Option<String>, // Time of last trade
+    pub ltt: Option<String>, // Time of last trade
     market_status: Option<String>,
     maxtp: Option<f64>, // Maximum trade price per day
     min_step: Option<f64>, // Minimum price increment
@@ -110,34 +110,34 @@ pub struct QuoteMessage {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderBookMessage {
-    n: i32,
-    i: String,
+    pub n: i32,
+    pub i: String, // Ticker, by which market depth information has been received 
     min_step: Option<f64>,
     step_price: Option<f64>,
-    del: Vec<DeleteEntry>,
-    ins: Vec<InsertEntry>,
-    upd: Vec<UpdateEntry>,
-    cnt: i32,
+    pub del: Vec<DeleteEntry>, // Market Depth strings to delete
+    pub ins: Vec<InsertEntry>, // New strings in market depth 
+    pub upd: Vec<UpdateEntry>, // Market depth data strings to update
+    cnt: i32, // Depth of market data
     x: i32,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DeleteEntry {
-    p: f64,
-    k: i32,
+    pub p: f64, // String price of the market depth
+    pub k: i32, // Position number in the market depth
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InsertEntry {
-    p: f64,
-    s: String,
-    q: i32,
-    k: i32,
+    pub p: f64, // String price of the market depth 
+    pub s: String, // Buy or Sell sign {'S'|'B'}
+    pub q: i32, // A number in a string
+    pub k: i32, // Position number in the market depth
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateEntry {
-    p: f64,
-    s: String,
-    q: i32,
-    k: i32,
+    pub p: f64, // String price of the market depth
+    pub s: String, // Buy or Sell sign {'S'|'B'}
+    pub q: i32, // A number in a string
+    pub k: i32, // Position number in the market depth
 }
 
 #[derive(Debug, Serialize, Deserialize)]

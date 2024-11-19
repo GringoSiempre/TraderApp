@@ -1,5 +1,6 @@
 // Structs for market data updates
 mod market_data;
+mod processed_data;
 
 // Traits for pattern Observer
 mod observer;
@@ -23,9 +24,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use ring::rand::SecureRandom;
+use std::sync::{Arc, RwLock};
 
 use crate::api::Connection;
-use crate::observer::{ConsoleOutputSubscriber, DataProcessorSubscriber, MessagesToFileSubscriber, ServerMessagesPublisher};
+use crate::observer::{ConsoleOutputSubscriber, DataDeserializer, MessagesToFileSubscriber, ServerMessagesPublisher, DataProcessor};
+use crate::processed_data::{OrderBook, Portfolio, QuoteBook};
 
 struct MyApp {
     email_input: String,
@@ -34,10 +37,14 @@ struct MyApp {
     users: Vec<User>,
     credentials: Vec<Credentials>,
     connections: Vec<Connection>,
+    order_books: Arc<RwLock<Vec<OrderBook>>>,
+    quotes: Arc<RwLock<Vec<QuoteBook>>>,
+    portfolios: Arc<RwLock<Vec<Portfolio>>>,
     requests: Vec<Request>,
     tickers: Vec<String>,
     server_messages_publisher: ServerMessagesPublisher,
-    data_processor: DataProcessorSubscriber,
+    data_deserializer: DataDeserializer,
+    data_processor: DataProcessor,
     data_receiver: mpsc::Receiver<String>,
     display_data: String,
     error_message: String,
@@ -50,6 +57,9 @@ impl Default for MyApp {
             "SPY.US".to_string()
         ];
         let (data_sender, data_receiver) = mpsc::channel(100);
+        let order_books = Arc::new(RwLock::new(Vec::new()));
+        let quotes = Arc::new(RwLock::new(Vec::new()));
+        let portfolios = Arc::new(RwLock::new(Vec::new()));
         Self {
             email_input: String::new(),
             password_input: String::new(),
@@ -57,6 +67,9 @@ impl Default for MyApp {
             users: crypto_utils::load_users(),
             credentials: Vec::new(),
             connections: Vec::new(),
+            order_books: Arc::clone(&order_books),
+            quotes: Arc::clone(&quotes),
+            portfolios: Arc::clone(&portfolios),
             requests: vec![
                 Request::quotes(tickers.clone()),
                 Request::portfolio(), 
@@ -64,7 +77,8 @@ impl Default for MyApp {
             ],
             tickers: tickers,
             server_messages_publisher: ServerMessagesPublisher::new(),
-            data_processor: DataProcessorSubscriber::new(data_sender),
+            data_deserializer: DataDeserializer::new(data_sender.clone()),
+            data_processor: DataProcessor::new(data_sender, Arc::clone(&order_books), Arc::clone(&quotes), Arc::clone(&portfolios)),
             data_receiver: data_receiver,
             display_data: String::new(),
             error_message: String::new(),
@@ -79,7 +93,7 @@ impl eframe::App for MyApp {
                 while let Ok(new_data) = self.data_receiver.try_recv() {
                     self.display_data = new_data;
                 }
-                ui.heading("Credentials data");
+                ui.heading(egui::RichText::new("Credentials").strong());
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.add_sized(egui::Vec2::new(50.0, 20.0), egui::Label::new("id"));
@@ -100,6 +114,77 @@ impl eframe::App for MyApp {
                     }
                 });
                 ui.label(format!("\n\nlast message from server: {}", self.display_data));
+
+                ui.separator();
+                ui.heading(egui::RichText::new("Portfolios").strong());
+
+                // Display Order Books
+                ui.separator();
+                ui.heading(egui::RichText::new("Order books").strong());
+                let order_books = self.order_books.read().unwrap();
+                for order_book in order_books.iter() {
+                    ui.label(format!("Account id: {}", order_book.id));
+                    ui.horizontal(|ui| {
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Ticker").strong()));
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Side").strong()));
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Price").strong()));
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Quantity").strong()));
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Position").strong()));
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Message number").strong()));
+                    });
+                    for (ticker, block) in &order_book.order_book {
+                        for row in &block.buy_rows {
+                            ui.horizontal(|ui| {
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", ticker)));
+                                ui.add_sized(
+                                    egui::Vec2::new(100.0, 20.0), 
+                                    egui::Label::new(egui::RichText::new("Buy").color(egui::Color32::DARK_GREEN)),
+                                );
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{:.2}", row.price)));
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", row.quantity)));
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", row.position)));
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", row.message_number)));
+                            });
+                        }
+                        for row in &block.sell_rows {
+                            ui.horizontal(|ui| {
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", ticker)));
+                                ui.add_sized(
+                                    egui::Vec2::new(100.0, 20.0),
+                                    egui::Label::new(egui::RichText::new("Sell").color(egui::Color32::DARK_RED)),
+                                );
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{:.2}", row.price)));
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", row.quantity)));
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", row.position)));
+                                ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", row.message_number)));
+                            });
+                        }
+                    }
+                }
+
+                ui.separator();
+                ui.heading(egui::RichText::new("Quotes").strong());
+                let quotes = self.quotes.read().unwrap();
+                for quotes_book in quotes.iter() {
+                    ui.label(format!("Account id: {}", quotes_book.id));
+                    ui.horizontal(|ui| {
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Ticker").strong()));
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Bid price").strong()));
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Ask price").strong()));
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Last trade").strong()));
+                        ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Last trade time").strong()));
+                    });
+                    for row in quotes_book.quotes_list.iter() {
+                        ui.horizontal(|ui| {
+                            ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", row.ticker.clone().unwrap_or_else(|| "N/A".to_string()))));
+                            ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new(format!("{:.2}", row.bid_price.clone().unwrap_or(0.0))).strong()));
+                            ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new(format!("{:.2}", row.ask_price.clone().unwrap_or(0.0))).strong()));
+                            ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{:.2}", row.last_trade.clone().unwrap_or(0.0))));
+                            ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", row.last_trade_time.clone().unwrap_or_else(|| "N/A".to_string()))));
+                        });
+                    }
+                }
+               
 
             });
         } else {
@@ -125,7 +210,8 @@ impl eframe::App for MyApp {
                             
                             self.server_messages_publisher.subscribe(Box::new(ConsoleOutputSubscriber));
                             self.server_messages_publisher.subscribe(Box::new(MessagesToFileSubscriber::new("messages.log".to_string())));
-                            self.server_messages_publisher.subscribe(Box::new(self.data_processor.clone()));
+                            self.server_messages_publisher.subscribe(Box::new(self.data_deserializer.clone()));
+                            self.data_deserializer.subscribe(Box::new(self.data_processor.clone()));
                             
                             let derived_key = crypto_utils::derive_key_from_password(&self.password_input);
                             let encrypted_master_key = base64::decode(&user.encrypted_master_key).expect("Failed to decode encrypted_master_key");
@@ -197,7 +283,7 @@ async fn main() {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1000.0, 1000.0]),
+            .with_inner_size([1000.0, 1400.0]),
         ..Default::default()    
     };
     eframe::run_native(
