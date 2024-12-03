@@ -145,7 +145,7 @@ pub struct PortfolioMessage {
     loaded: bool,
     m_id: String,
     acc: Vec<AccountEntry>,
-    pos: Vec<PositionEntry>,
+    pub pos: Vec<PositionEntry>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AccountEntry {
@@ -161,36 +161,36 @@ pub struct AccountEntry {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PositionEntry {
-    i: String, // Open position ticker
-    t: i32,
-    k: i32,
-    s: f64,
-    q: i32, // Number of securities in the position
-    fv: i32, // Coefficient to calculate initial margin
-    curr: String, // Open position currency
-    currval: f64, // Account currency exchange rate
-    name: String, // Issuer name
-    name2: String, // Issuer alternative name
-    open_bal: f64, // Position book value
-    mkt_price: f64, // Open position market value
-    vm: String, // Variable margin of a position
-    go: String, // Initial margin per position
-    profit_close: f64, // Previous day positions profit
-    acc_pos_id: i64, // Unique identifier of an open position in the Tradernet system
-    accruedint_a: String, // (ACI) accrued coupon income
-    acd: String,
-    bal_price_a: f64, // Open position book value
-    price_a: f64, // Book value of the position when opened
-    base_currency: String,
-    face_val_a: i32,
-    scheme_calc: String,
-    instr_id: i64,
-    #[serde(rename = "Yield")]
-    yield_: String,
-    issue_nb: String,
-    profit_price: f64, // Current position profit
-    market_value: f64, // Asset value
-    close_price: f64, // Position closing price
+    pub i: String, // Open position ticker
+    // t: i32,
+    // k: i32,
+    // s: f64,
+    pub q: i32, // Number of securities in the position
+    // fv: i32, // Coefficient to calculate initial margin
+    // curr: String, // Open position currency
+    // currval: f64, // Account currency exchange rate
+    // name: String, // Issuer name
+    // name2: String, // Issuer alternative name
+    // open_bal: f64, // Position book value
+    // mkt_price: f64, // Open position market value
+    // vm: String, // Variable margin of a position
+    // go: String, // Initial margin per position
+    // profit_close: f64, // Previous day positions profit
+    pub acc_pos_id: i64, // Unique identifier of an open position in the Tradernet system
+    // accruedint_a: String, // (ACI) accrued coupon income
+    // acd: i32,
+    // bal_price_a: f64, // Open position book value
+    pub price_a: f64, // Book value of the position when opened
+    // base_currency: String,
+    // face_val_a: i32,
+    // scheme_calc: String,
+    // instr_id: i64,
+    // #[serde(rename = "Yield")]
+    // yield_: String,
+    // issue_nb: String,
+    // profit_price: f64, // Current position profit
+    // market_value: f64, // Asset value
+    // close_price: f64, // Position closing price
 }
 
 pub fn deserialize_message (message: &str) -> Option<MarketData> {

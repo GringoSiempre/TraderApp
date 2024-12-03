@@ -6,6 +6,9 @@ use tokio::sync::mpsc;
 use crate::market_data::{deserialize_message, MarketData};
 // use crate::processed_data::{OrderBook, ProcessedData};
 use crate::processed_data::*;
+use crate::trading_utils::*;
+use crate::api::*;
+use crate::api_utils::*;
 
 pub trait MessageSubscriber: Send + Sync {
     fn on_data(&mut self, id: &str, timestamp: chrono::DateTime<chrono::Local>, data: &str);
@@ -18,6 +21,9 @@ pub trait MarketDataUpdateSubscriber: Send + Sync {
     fn on_data(&mut self, id: &str, market_data: &MarketData);
 }
 pub trait ProcessedDataSubscriber: Send + Sync {
+    fn on_data(&mut self, id: &str, positions: Vec<Position>);
+}
+pub trait PortfolioUpdaterSubscriber: Send + Sync {
     fn on_data(&mut self, id: &str);
 }
 
@@ -124,7 +130,6 @@ pub struct DataProcessor {
     data_sender: mpsc::Sender<String>,
     order_books: Arc<RwLock<Vec<OrderBook>>>,
     quotes: Arc<RwLock<Vec<QuoteBook>>>,
-    portfolios: Arc<RwLock<Vec<Portfolio>>>,
     subscribers: Arc<Mutex<Vec<Box<dyn ProcessedDataSubscriber>>>>,
 }
 impl DataProcessor {
@@ -132,32 +137,31 @@ impl DataProcessor {
         data_sender: mpsc::Sender<String>, 
         order_books: Arc<RwLock<Vec<OrderBook>>>, 
         quotes: Arc<RwLock<Vec<QuoteBook>>>, 
-        portfolios: Arc<RwLock<Vec<Portfolio>>>
     ) -> Self {
         Self {
             data_sender,
             order_books,
             quotes,
-            portfolios,
             subscribers: Arc::new(Mutex::new(Vec::new())),
         }
     }
     pub fn subscribe(&mut self, subscriber: Box<dyn ProcessedDataSubscriber>) {
         self.subscribers.lock().unwrap().push(subscriber);
     }
-    pub fn notify_subscribers(&mut self, id: &str) {
+    pub fn notify_subscribers(&mut self, id: &str, positions: Vec<Position>) {
         let subscribers = Arc::clone(&self.subscribers);
         let id = id.to_string();
         tokio::spawn(async move {
             let mut subscribers = subscribers.lock().unwrap();
             for subscriber in subscribers.iter_mut() {
-                subscriber.on_data(&id);
+                subscriber.on_data(&id, positions.clone());
             }
         });
     }
 }
 impl MarketDataUpdateSubscriber for DataProcessor {
     fn on_data(&mut self, id: &str, market_data: &MarketData) {
+        let mut positions = Vec::new();
         match market_data {
             MarketData::OrderBookMessage(order_book_message) => {
                 let mut order_books = self.order_books.write().unwrap();
@@ -179,7 +183,21 @@ impl MarketDataUpdateSubscriber for DataProcessor {
                         position: ins_entry.k,
                         message_number: order_book_message.n,
                     };
-                    order_book.add_row(&order_book_message.i, row);                 
+                    order_book.add_row(&order_book_message.i, row.clone());
+                    if row.side == Side::Buy {
+                        let price_update = Position {
+                            position_id: 0,
+                            ticker: order_book_message.i.clone(),
+                            quantity: 0,
+                            open_price: 0.0,
+                            current_price: ins_entry.p,
+                            pnl: 0.0,
+                            sl_type: SLType::None,
+                            sl_price: 0.0,
+                            close_alert: false,
+                        };
+                        positions.push(price_update);
+                    };
                 }
                 for del_entry in &order_book_message.del {
                     order_book.remove_row(del_entry.p);
@@ -204,16 +222,160 @@ impl MarketDataUpdateSubscriber for DataProcessor {
                     last_trade_time: quote_message.clone().ltt,
                 };
                 quote_book.add_quote(quote_data);
-
-                // let message = "On air...".to_string();                
-                // let _ = self.data_sender.try_send(message);
             }
             MarketData::PortfolioMessage(portfolio_message) => {
-                // let message = format!("{} Для {} получены дата процессором {:?}", chrono::Local::now(), id, portfolio_message);
-                let message = "On air...".to_string();
-                let _ = self.data_sender.try_send(message);
+                // let mut portfolios = self.portfolios.write().unwrap();
+                // let portfolio = if let Some(portfolio) = portfolios.iter_mut().find (|portfolio| portfolio.id == id) {
+                //     portfolio
+                // } else {
+                //     portfolios.push(Portfolio::new(id));
+                //     portfolios.last_mut().unwrap()
+                // };
+
+                for pos_entry in &portfolio_message.pos {
+                    let position = Position {
+                        position_id: pos_entry.acc_pos_id,
+                        ticker: pos_entry.i.to_string(),
+                        quantity: pos_entry.q,
+                        open_price: pos_entry.price_a,
+                        current_price: 0.0,
+                        pnl: 0.0,
+                        sl_type: SLType::None,
+                        sl_price: 0.0,
+                        close_alert: false,
+                    };
+                    positions.push(position);
+
+                    // if let Some(position) = portfolio.portfolio.iter_mut().find(|position| position.ticker == pos_entry.i) {
+                    //     position.open_price = pos_entry.price_a;
+                    //     position.quantity = pos_entry.q;
+                    // } else {
+                    //     let position = Position {
+                    //         position_id: pos_entry.acc_pos_id,
+                    //         ticker: pos_entry.i.to_string(),
+                    //         quantity: pos_entry.q,
+                    //         open_price: pos_entry.price_a,
+                    //         current_price: 0.0,
+                    //         pnl: 0.0,
+                    //     };
+                    //     portfolio.portfolio.push(position);
+                    // }
+                }                
             }
         }
-        self.notify_subscribers(id);
+        self.notify_subscribers(id, positions);
+    }
+}
+
+#[derive(Clone)]
+pub struct PortfolioUpdater {
+    portfolios: Arc<RwLock<Vec<Portfolio>>>,
+    subscribers: Arc<Mutex<Vec<Box<dyn PortfolioUpdaterSubscriber>>>>,
+}
+impl PortfolioUpdater {
+    pub fn new(
+        portfolios: Arc<RwLock<Vec<Portfolio>>>
+    ) -> Self {
+        Self {
+            portfolios,
+            subscribers: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+    pub fn subscribe(&mut self, subscriber: Box<dyn PortfolioUpdaterSubscriber>) {
+        self.subscribers.lock().unwrap().push(subscriber);
+    }
+    pub fn notify_subscribers(&mut self, id: &str) {
+        let subscribers = Arc::clone(&self.subscribers);
+        let id = id.to_string();
+        tokio::spawn(async move {
+            let mut subscribers = subscribers.lock().unwrap();
+            for subscriber in subscribers.iter_mut() {
+                subscriber.on_data(&id);
+            }
+        });
+    }
+}
+impl ProcessedDataSubscriber for PortfolioUpdater {
+    fn on_data(&mut self, id: &str, positions: Vec<Position>) {
+        let mut portfolios = self.portfolios.write().unwrap();
+        let portfolio = if let Some(portfolio) = portfolios.iter_mut().find (|portfolio| portfolio.id == id) {
+            portfolio
+        } else {
+            portfolios.push(Portfolio::new(id));
+            portfolios.last_mut().unwrap()
+        };
+        for position_update in positions {
+            // If this is an update to the current price
+            if position_update.position_id == 0 {
+                if let Some(position) = portfolio.portfolio.iter_mut().find(|position| position.ticker == position_update.ticker) {
+                    position.current_price = position_update.current_price;
+                    position.pnl = ( position.current_price - position.open_price ) * position.quantity as f64;
+                    // Checking stop-loss
+                    (position.sl_type, position.sl_price, position.close_alert) = check_sl(&position);
+                }
+            } else {
+                if let Some(position) = portfolio.portfolio.iter_mut().find(|position| position.ticker == position_update.ticker) {
+                    // If the quantity in the position is zeroed (when closing a position)
+                    if position_update.quantity == 0 {
+                        portfolio.portfolio.retain(|position| position.ticker != position_update.ticker);
+                    // If the quantity and current price have changed (when adding a position)
+                    } else {
+                        position.open_price = position_update.open_price;
+                        position.quantity = position_update.quantity;
+                    }
+                // If this is a new position
+                } else {
+                    portfolio.portfolio.push(position_update);
+                }
+            }
+        };
+    }
+}
+
+#[derive(Clone)]
+pub struct QuotesRequester {
+    connections: Arc<RwLock<Vec<Connection>>>,
+}
+impl QuotesRequester {
+    pub fn new(connections: Arc<RwLock<Vec<Connection>>>) -> Self {
+        Self {
+            connections,
+        }
+    }
+}
+impl ProcessedDataSubscriber for QuotesRequester {
+    fn on_data(&mut self, id: &str, positions: Vec<Position>) {
+        let mut connections = self.connections.write().unwrap();
+        let connection = if let Some(connection) = connections.iter_mut().find (|connection| connection.credentials.id == id) {
+            let mut tickers = connection.query_tickers.clone();
+            let mut new_tickers = Vec::new();
+            for position_update in positions.iter().filter(|position_update| position_update.position_id != 0) {
+                if position_update.quantity == 0 {
+                    let ticker_to_remove = position_update.ticker.to_string();
+                    tickers.retain(|ticker| ticker != &ticker_to_remove);
+                } else {
+                    if !tickers.contains(&position_update.ticker.to_string()) {
+                        tickers.push(position_update.ticker.to_string());
+                        new_tickers.push(position_update.ticker.to_string());
+                    }
+                }
+            }
+            if !new_tickers.is_empty() {
+                connection.query_tickers = tickers.clone();
+                let quotes_request = Request::quotes(tickers.clone());
+                let quotes_request_message = quotes_request.message();
+                let order_book_request = Request::order_book(tickers.clone());
+                let order_book_request_message = order_book_request.message();
+                let sender = connection.channels.sender_to_connector.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = sender.send(quotes_request_message) {
+                        eprintln!("Failed to send quotes request message: {}", e);
+                    }
+                    if let Err(e) = sender.send(order_book_request_message) {
+                        eprintln!("Failed to send order book request message: {}", e);
+                    }
+                });
+            }
+        };
     }
 }

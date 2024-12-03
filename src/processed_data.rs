@@ -1,10 +1,15 @@
 use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use crate::trading_utils;
+use trading_utils::SLType;
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Side {
     Buy,
     Sell,
 }
 
+#[derive(Debug, Clone)]
 pub struct OrderBookRow {
     pub price: f64,
     pub side: Side,
@@ -101,17 +106,22 @@ impl QuoteBook {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Position {
-    position_id: u64,
-    i: String,
-    q: u64,
-    open_price: f64,
-    current_price: f64,
-    pnl_price: f64,
+    pub position_id: i64,
+    pub ticker: String,
+    pub quantity: i32,
+    pub open_price: f64,
+    pub current_price: f64,
+    pub pnl: f64,
+    pub sl_type: SLType,
+    pub sl_price: f64,
+    pub close_alert: bool,
 }
+#[derive(Debug)]
 pub struct Portfolio {
-    id: String,
-    portfolio: Vec<Position>,
+    pub id: String,
+    pub portfolio: Vec<Position>,
 }
 impl Portfolio {
     pub fn new(id: &str) -> Self {
