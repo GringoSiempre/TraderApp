@@ -68,3 +68,42 @@ impl Request {
         }
     }
 }
+
+// Parameters for sending orders
+#[derive(Debug, Clone, PartialEq)]
+pub enum ActionType {
+    Buy,
+    Sell,
+}
+impl ActionType {
+    pub fn ff_code(&self) -> u32 {
+        match self {
+            ActionType::Buy => 1,
+            ActionType::Sell => 3,
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
+pub enum OrderType {
+    Market,
+    Limit,
+}
+impl OrderType {
+    pub fn ff_code(&self) -> u32 {
+        match self {
+            OrderType::Market => 1,
+            OrderType::Limit => 2,
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expirations {
+    Day,
+}
+impl Expirations {
+    pub fn ff_code(&self) -> u32 {
+        match self {
+            Expirations::Day => 1,
+        }
+    }
+}

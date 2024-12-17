@@ -1,10 +1,10 @@
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, Mutex, RwLock};
+use std::sync::atomic::{AtomicI64, Ordering};
 use tokio::task;
 use tokio::sync::mpsc;
 use crate::market_data::{deserialize_message, MarketData};
-// use crate::processed_data::{OrderBook, ProcessedData};
 use crate::processed_data::*;
 use crate::trading_utils::*;
 use crate::api::*;
@@ -130,18 +130,24 @@ pub struct DataProcessor {
     data_sender: mpsc::Sender<String>,
     order_books: Arc<RwLock<Vec<OrderBook>>>,
     quotes: Arc<RwLock<Vec<QuoteBook>>>,
+    tickers: Arc<RwLock<Vec<TickerOptions>>>,
+    days_to_expiration: Arc<AtomicI64>,
     subscribers: Arc<Mutex<Vec<Box<dyn ProcessedDataSubscriber>>>>,
 }
 impl DataProcessor {
     pub fn new(
         data_sender: mpsc::Sender<String>, 
         order_books: Arc<RwLock<Vec<OrderBook>>>, 
-        quotes: Arc<RwLock<Vec<QuoteBook>>>, 
+        quotes: Arc<RwLock<Vec<QuoteBook>>>,
+        tickers: Arc<RwLock<Vec<TickerOptions>>>,
+        days_to_expiration: Arc<AtomicI64>,
     ) -> Self {
         Self {
             data_sender,
             order_books,
             quotes,
+            tickers,
+            days_to_expiration,
             subscribers: Arc::new(Mutex::new(Vec::new())),
         }
     }
@@ -183,6 +189,12 @@ impl MarketDataUpdateSubscriber for DataProcessor {
                         position: ins_entry.k,
                         message_number: order_book_message.n,
                     };
+                    let mut tickers = self.tickers.write().unwrap();
+                    // Обновляем тикеры опционов для отслеживаемых базовых активов
+                    if let Some(ticker_row) = tickers.iter_mut().find (|ticker_row| ticker_row.ticker == order_book_message.i) {
+                        ticker_row.update(row.side.clone(), row.price.clone(), self.days_to_expiration.load(Ordering::Relaxed));
+                    }
+
                     order_book.add_row(&order_book_message.i, row.clone());
                     if row.side == Side::Buy {
                         let price_update = Position {
@@ -192,9 +204,11 @@ impl MarketDataUpdateSubscriber for DataProcessor {
                             open_price: 0.0,
                             current_price: ins_entry.p,
                             pnl: 0.0,
+                            sl_strategy: SLStrategy::WithoutStops,
                             sl_type: SLType::None,
                             sl_price: 0.0,
                             close_alert: false,
+                            closing: false,
                         };
                         positions.push(price_update);
                     };
@@ -224,14 +238,6 @@ impl MarketDataUpdateSubscriber for DataProcessor {
                 quote_book.add_quote(quote_data);
             }
             MarketData::PortfolioMessage(portfolio_message) => {
-                // let mut portfolios = self.portfolios.write().unwrap();
-                // let portfolio = if let Some(portfolio) = portfolios.iter_mut().find (|portfolio| portfolio.id == id) {
-                //     portfolio
-                // } else {
-                //     portfolios.push(Portfolio::new(id));
-                //     portfolios.last_mut().unwrap()
-                // };
-
                 for pos_entry in &portfolio_message.pos {
                     let position = Position {
                         position_id: pos_entry.acc_pos_id,
@@ -240,27 +246,14 @@ impl MarketDataUpdateSubscriber for DataProcessor {
                         open_price: pos_entry.price_a,
                         current_price: 0.0,
                         pnl: 0.0,
+                        sl_strategy: SLStrategy::WithoutStops,
                         sl_type: SLType::None,
                         sl_price: 0.0,
                         close_alert: false,
+                        closing: false,
                     };
                     positions.push(position);
-
-                    // if let Some(position) = portfolio.portfolio.iter_mut().find(|position| position.ticker == pos_entry.i) {
-                    //     position.open_price = pos_entry.price_a;
-                    //     position.quantity = pos_entry.q;
-                    // } else {
-                    //     let position = Position {
-                    //         position_id: pos_entry.acc_pos_id,
-                    //         ticker: pos_entry.i.to_string(),
-                    //         quantity: pos_entry.q,
-                    //         open_price: pos_entry.price_a,
-                    //         current_price: 0.0,
-                    //         pnl: 0.0,
-                    //     };
-                    //     portfolio.portfolio.push(position);
-                    // }
-                }                
+                }
             }
         }
         self.notify_subscribers(id, positions);

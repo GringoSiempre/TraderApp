@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::trading_utils;
-use trading_utils::SLType;
+use trading_utils::{SLType, SLStrategy};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Side {
@@ -114,9 +113,11 @@ pub struct Position {
     pub open_price: f64,
     pub current_price: f64,
     pub pnl: f64,
+    pub sl_strategy: SLStrategy,
     pub sl_type: SLType,
     pub sl_price: f64,
     pub close_alert: bool,
+    pub closing: bool,
 }
 #[derive(Debug)]
 pub struct Portfolio {

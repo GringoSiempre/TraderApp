@@ -210,8 +210,8 @@ pub fn deserialize_message (message: &str) -> Option<MarketData> {
         }
         "portfolio" => {
             serde_json::from_value::<PortfolioMessage>(data.clone())
-                .map_err(|e| println!("Deserialization error: {:?}", e)).ok()
-                // .ok()
+                .map_err(|e| println!("Deserialization error: {:?}", e))
+                .ok()
                 .map(MarketData::PortfolioMessage)
         }
         _ => None,
