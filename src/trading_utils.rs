@@ -121,7 +121,11 @@ pub fn check_sl(position: &Position) -> (SLType, f64, bool) {
                     },
                 }
             }
-            _ => {}
+            _ => {
+                sl_type = SLType::None;
+                sl_price = 0.0;
+                close_alert = false;
+            }
         }
     }
     (sl_type, sl_price, close_alert)

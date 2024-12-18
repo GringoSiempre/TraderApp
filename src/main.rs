@@ -75,7 +75,7 @@ impl Default for MyApp {
         let quotes = Arc::new(RwLock::new(Vec::new()));
         let portfolios = Arc::new(RwLock::new(Vec::new()));
         let tickers = Arc::new(RwLock::new(tickers));
-        let days_to_expiration = Arc::new(AtomicI64::new(1));
+        let days_to_expiration = Arc::new(AtomicI64::new(2));
         Self {
             email_input: String::new(),
             password_input: String::new(),
@@ -202,11 +202,11 @@ impl eframe::App for MyApp {
                     ui.horizontal(|ui| {
                         ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(egui::RichText::new("Position ID").strong()));
                         ui.add_sized(egui::Vec2::new(150.0, 20.0), egui::Label::new(egui::RichText::new("Ticker").strong()));
-                        ui.add_sized(egui::Vec2::new(80.0, 20.0), egui::Label::new(egui::RichText::new("Quantity").strong()));
+                        ui.add_sized(egui::Vec2::new(60.0, 20.0), egui::Label::new(egui::RichText::new("Quantity").strong()));
                         ui.add_sized(egui::Vec2::new(80.0, 20.0), egui::Label::new(egui::RichText::new("Open price").strong()));
                         ui.add_sized(egui::Vec2::new(80.0, 20.0), egui::Label::new(egui::RichText::new("Current price").strong()));
                         ui.add_sized(egui::Vec2::new(70.0, 20.0), egui::Label::new(egui::RichText::new("PNL").strong()));
-                        ui.add_sized(egui::Vec2::new(70.0, 20.0), egui::Label::new(egui::RichText::new("Strategy").strong()));
+                        ui.add_sized(egui::Vec2::new(90.0, 20.0), egui::Label::new(egui::RichText::new("Strategy").strong()));
                         ui.add_sized(egui::Vec2::new(70.0, 20.0), egui::Label::new(egui::RichText::new("SLType").strong()));
                         ui.add_sized(egui::Vec2::new(70.0, 20.0), egui::Label::new(egui::RichText::new("").strong()));
                         ui.add_sized(egui::Vec2::new(60.0, 20.0), egui::Label::new(egui::RichText::new("SL price").strong()));
@@ -218,13 +218,13 @@ impl eframe::App for MyApp {
                         ui.horizontal(|ui| {
                             ui.add_sized(egui::Vec2::new(100.0, 20.0), egui::Label::new(format!("{}", row.position_id)));
                             ui.add_sized(egui::Vec2::new(150.0, 20.0), egui::Label::new(egui::RichText::new(format!("{}", row.ticker)).strong()));
-                            ui.add_sized(egui::Vec2::new(80.0, 20.0), egui::Label::new(egui::RichText::new(format!("{}", row.quantity)).strong()));
+                            ui.add_sized(egui::Vec2::new(60.0, 20.0), egui::Label::new(egui::RichText::new(format!("{}", row.quantity)).strong()));
                             ui.add_sized(egui::Vec2::new(80.0, 20.0), egui::Label::new(format!("{:.2}", row.open_price)));
                             ui.add_sized(egui::Vec2::new(80.0, 20.0), egui::Label::new(format!("{:.2}", row.current_price)));
                             ui.add_sized(egui::Vec2::new(70.0, 20.0), egui::Label::new(egui::RichText::new(format!("{:.2}", row.pnl)).strong()));
 
                             // ui.add_sized(egui::Vec2::new(70.0, 20.0),
-                            egui::ComboBox::from_label("Select strategy")
+                            egui::ComboBox::from_label("")
                                 .selected_text(row.sl_strategy.description())
                                 .show_ui(ui, |ui| {
                                     for strategy in SLStrategy::ALL.iter() {
