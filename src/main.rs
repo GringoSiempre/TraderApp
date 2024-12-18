@@ -224,17 +224,19 @@ impl eframe::App for MyApp {
                             ui.add_sized(egui::Vec2::new(70.0, 20.0), egui::Label::new(egui::RichText::new(format!("{:.2}", row.pnl)).strong()));
 
                             // ui.add_sized(egui::Vec2::new(70.0, 20.0),
-                            egui::ComboBox::from_label("")
-                                .selected_text(row.sl_strategy.description())
-                                .show_ui(ui, |ui| {
-                                    for strategy in SLStrategy::ALL.iter() {
-                                        ui.selectable_value(
-                                            &mut row.sl_strategy,
-                                            *strategy,
-                                            strategy.description(),
-                                        );
-                                    }
-                                });
+                            ui.push_id(row.position_id, |ui| {
+                                egui::ComboBox::from_label("")
+                                    .selected_text(row.sl_strategy.description())
+                                    .show_ui(ui, |ui| {
+                                        for strategy in SLStrategy::ALL.iter() {
+                                            ui.selectable_value(
+                                                &mut row.sl_strategy,
+                                                *strategy,
+                                                strategy.description(),
+                                            );
+                                        }
+                                    });
+                            });
                             // );
                             // ui.add_sized(egui::Vec2::new(70.0, 20.0), egui::Label::new(egui::RichText::new(format!("{}", row.sl_strategy.description())).strong()));
 
